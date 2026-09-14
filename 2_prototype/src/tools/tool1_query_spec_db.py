@@ -41,14 +41,12 @@ def get_7_quantitative_indicators(tickers: list) -> dict:
     if len(records) == 1:
         r = records[0]
         output_text = (
-            f"[{r['name']} ({r['ticker']})] 7대 정량 지표 (DB 레코드 매핑)\n\n"
-            f"1. 종목코드: {r['ticker']}\n"
-            f"2. 공식종목명: {r['name']}\n"
-            f"3. 자산군 분류: {r['category']}\n"
-            f"4. 기초지수: {r['underlying_index']}\n"
-            f"5. 총보수율(TER): 연 {r['ter']}%\n"
-            f"6. 분배금 지급주기: {r['distribution_cycle']}\n"
-            f"7. 순자산총액(AUM): {r['aum']}\n\n"
+            f"[{r['name']} ({r['ticker']})] 정량 지표 개요\n\n"
+            f"- 공식 종목명: {r['name']} (종목코드: {r['ticker']})\n"
+            f"- 자산군 및 기초지수: {r['category']} 자산군 / {r['underlying_index']} 지수 추종\n"
+            f"- 실질 총보수율(TER): 연 {r['ter']}%\n"
+            f"- 분배금 지급주기: {r['distribution_cycle']}\n"
+            f"- 순자산총액(AUM): {r['aum']}\n\n"
             f"출처: 한국투자신탁운용 정형 DB"
         )
         return {"status": "SUCCESS", "mode": "SINGLE", "records": records, "text": output_text}

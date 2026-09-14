@@ -177,8 +177,19 @@ def refine_query(user_input: str) -> dict:
                     "matched_alias": None
                 }
 
-    # 2-4. 식별 실패 시 기본 대표 종목 fallback (S&P500)
+    # 2-4. 식별 실패 시 범용 추천/카테고리 감지 처리 및 기본 대표 종목 fallback
     if not found_tickers:
+        for cat_key in AMBIGUOUS_CATEGORY_MAP.keys():
+            if cat_key in cleaned_lower or "추천" in cleaned_lower:
+                conn.close()
+                return {
+                    "raw_query": user_input,
+                    "cleaned_query": cleaned,
+                    "tickers": [],
+                    "official_names": [],
+                    "intent": "TOOL4_AMBIGUOUS_CLARIFICATION",
+                    "matched_alias": cat_key if cat_key in cleaned_lower else "미국주식"
+                }
         found_tickers = ["360200"]
 
     # 식별된 티커들의 공식 종목명 조회
