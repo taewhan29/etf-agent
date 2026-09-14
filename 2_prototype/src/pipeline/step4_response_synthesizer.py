@@ -33,9 +33,9 @@ def get_gemini_api_key() -> str:
         import streamlit as st  # type: ignore
         if hasattr(st, "secrets"):
             if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
-                return st.secrets["GEMINI_API_KEY"].strip()
+                return str(st.secrets["GEMINI_API_KEY"]).strip()
             if "gemini_api_key" in st.secrets and st.secrets["gemini_api_key"]:
-                return st.secrets["gemini_api_key"].strip()
+                return str(st.secrets["gemini_api_key"]).strip()
     except Exception:
         pass
 
@@ -75,8 +75,6 @@ def fallback_synthesize(query: str, execution_results: list) -> str:
             txt = output["text"]
             if tname == "tool2_search_pdf_rag" and status == "NOT_FOUND" and has_success_spec_or_math:
                 txt = "[공시 문맥 안내]\n상세 공시 본문은 확인되지 않았으나, 정량 지표 데이터는 위와 같습니다."
-            elif tname == "tool2_search_pdf_rag" and status == "NOT_FOUND":
-                continue
             combined_texts.append(txt)
 
     if not combined_texts:
@@ -129,53 +127,63 @@ def synthesize_response(exec_info: dict) -> dict:
     # 3. Gemini API 키 확인 및 LLM 합성 시도
     api_key = get_gemini_api_key()
     
-    if api_key:
+    if api_key and ground_truth_context:
+        prompt = (
+            f"당신은 한국투자신탁운용 ACE ETF 전문 챗봇입니다.\n"
+            f"아래 제공된 [도구 실행 데이터]의 내용을 바탕으로 사용자의 질문에 친절하고 정확하게 답변하십시오.\n"
+            f"제공된 데이터의 핵심 수치와 내용을 왜곡하거나 누락하지 말고 명확하게 정리하십시오.\n"
+            f"불필요한 인사말이나 서론, 사족을 전면 배제하고 깔끔한 단문 위주로 작성하십시오.\n"
+            f"아스테리스크(*) 기호와 이모티콘은 절대 사용하지 마십시오.\n\n"
+            f"[사용자 질문]: {query}\n\n"
+            f"[도구 실행 데이터]:\n{ground_truth_context}\n\n"
+            f"[답변]:"
+        )
+
+        # 3-1. 신규 google-genai SDK 호출 시도
         try:
             from google import genai  # type: ignore
             client = genai.Client(api_key=api_key)
 
-            prompt = (
-                f"당신은 한국투자신탁운용 ACE ETF 전문 챗봇입니다.\n"
-                f"아래 제공된 [도구 실행 데이터]를 참고하여 사용자의 질문에 친절하고 정확하게 답변하십시오.\n"
-                f"데이터가 부족할 경우 거짓 정보를 지어내지 말고, 한국투자신탁운용 ACE ETF 공식 안내 및 추천 질문을 활용하도록 유도하십시오.\n"
-                f"불필요한 인사말이나 서론, 사족을 전면 배제하고 명확한 단문 위주로 작성하십시오.\n"
-                f"아스테리스크(*) 기호와 이모티콘은 절대 사용하지 마십시오.\n\n"
-                f"[사용자 질문]: {query}\n\n"
-                f"[도구 실행 데이터]:\n{ground_truth_context}\n\n"
-                f"[답변]:"
-            )
-
-            # gemini-2.5-flash 최우선 시도 (예외 발생 시 2.0-flash / 1.5-flash 자동 폴백)
-            try:
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt,
-                )
-            except Exception:
+            for model_id in ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']:
                 try:
                     response = client.models.generate_content(
-                        model='gemini-2.0-flash',
+                        model=model_id,
                         contents=prompt,
                     )
+                    raw_text = response.text or ""
+                    if raw_text.strip():
+                        return {
+                            "query": query,
+                            "routing_mode": routing_mode,
+                            "synthesis_mode": "GEMINI_LLM_SYNTHESIS",
+                            "final_response": clean_prohibited_characters(raw_text.strip())
+                        }
                 except Exception:
-                    response = client.models.generate_content(
-                        model='gemini-1.5-flash',
-                        contents=prompt,
-                    )
+                    continue
+        except Exception:
+            pass
 
-            raw_text = response.text or ""
-            final_response = clean_prohibited_characters(raw_text.strip())
+        # 3-2. 구버전 google.generativeai SDK 폴백 호출 시도
+        try:
+            import google.generativeai as genai_old  # type: ignore
+            genai_old.configure(api_key=api_key)
 
-            return {
-                "query": query,
-                "routing_mode": routing_mode,
-                "synthesis_mode": "GEMINI_LLM_SYNTHESIS",
-                "final_response": final_response
-            }
-
-        except Exception as e:
-            # API 키 오류나 네트워크 예외 발생 시 Fallback으로 전환
-            print(f"[알림] Gemini API 호출 예외 발생 -> Fallback 템플릿 사용 (사유: {e})")
+            for model_id in ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro']:
+                try:
+                    model = genai_old.GenerativeModel(model_id)
+                    response = model.generate_content(prompt)
+                    raw_text = response.text or ""
+                    if raw_text.strip():
+                        return {
+                            "query": query,
+                            "routing_mode": routing_mode,
+                            "synthesis_mode": "GEMINI_LLM_SYNTHESIS",
+                            "final_response": clean_prohibited_characters(raw_text.strip())
+                        }
+                except Exception:
+                    continue
+        except Exception as ex:
+            print(f"[알림] Gemini API 이중 SDK 호출 실패 -> Fallback 사용 (사유: {ex})")
 
     # 4. API 키 미설정 또는 호출 실패 시 Fallback 템플릿 사용
     fallback_response = fallback_synthesize(query, exec_results)

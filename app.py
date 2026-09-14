@@ -4,7 +4,7 @@
 - 디자인 스타일: web-precision-fintech (정밀 핀테크 라이트 팩)
 - 노 사이드바(No Sidebar) 및 중앙 단일 컬럼(Single-Column) 레이아웃
 - 개발자용 모니터링 요소 100% 제거 및 100% Ground Truth 원천 데이터 연동
-- 상단 히어로 추천 퀵 질의 및 답변 하단 원클릭 다음 추천 질문(Next Action) 연동
+- 대화 세션 초기화 및 유기적 질의 응답 연동 구조 완비
 - 이모티콘 및 아스테리스크(*) 완전 제거 준수
 """
 import os
@@ -56,6 +56,7 @@ st.markdown("""
         border-radius: 12px;
         border: 1px solid #e4e2dd;
         margin-bottom: 24px;
+        position: relative;
     }
     .fintech-brand-label {
         font-size: 12px;
@@ -80,13 +81,7 @@ st.markdown("""
         line-height: 1.55;
     }
     
-    /* 4. 등폭 숫자 정렬 (Tabular Nums) */
-    .tabular-num {
-        font-family: 'IBM Plex Mono', monospace, sans-serif;
-        font-variant-numeric: tabular-nums;
-    }
-    
-    /* 5. 챗봇 대화 말풍선 디테일 */
+    /* 4. 대화 말풍선 스타일 */
     .user-msg-box {
         background-color: #4f46e5;
         color: #ffffff;
@@ -120,7 +115,7 @@ st.markdown("""
         clear: both;
     }
     
-    /* 6. 추천 질문 영역 스타일 */
+    /* 5. 추천 질문 영역 스타일 */
     .rec-section-title {
         font-size: 13px;
         font-weight: 600;
@@ -129,7 +124,7 @@ st.markdown("""
         clear: both;
     }
     
-    /* 7. 법적 유의사항 푸터 박스 */
+    /* 6. 법적 유의사항 푸터 박스 */
     .legal-disclaimer {
         font-size: 12px;
         color: #6b7280;
@@ -142,7 +137,7 @@ st.markdown("""
         clear: both;
     }
     
-    /* 8. Streamlit 버튼 디테일 스타일링 */
+    /* 7. Streamlit 버튼 디테일 스타일링 */
     div.stButton > button {
         border-radius: 8px !important;
         border: 1px solid #e4e2dd !important;
@@ -170,17 +165,60 @@ if "pending_query" not in st.session_state:
     st.session_state.pending_query = None
 
 
+# --- 질의 처리 공통 함수 ---
+def process_user_query(query_text: str):
+    if not query_text or not query_text.strip():
+        return
+
+    cleaned_q = query_text.strip()
+    
+    # 1. 사용자 질문 추가
+    st.session_state.messages.append({"role": "user", "content": cleaned_q})
+    
+    # 2. 메인 파이프라인 실행
+    res = run_pipeline(cleaned_q)
+    final_output = res.get("final_output", "")
+    recommended_questions = res.get("recommended_questions", [])
+
+    # 답변 본문과 다음 추천 질문 분리
+    display_text = final_output
+    if "[다음 추천 질문]" in display_text:
+        display_text = display_text.split("[다음 추천 질문]")[0].strip()
+
+    # 3. 챗봇 응답 추가
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": display_text,
+        "recommendations": recommended_questions
+    })
+
+
 # --- 1. 상단 핀테크 헤더 밴드 ---
-st.markdown("""
-<div class="fintech-header-band">
-    <div class="fintech-brand-label">KOREA INVESTMENT MANAGEMENT</div>
-    <div class="fintech-title">한국투자신탁운용 ACE ETF AI 투자 파트너</div>
-    <div class="fintech-subtitle">공식 공시 데이터 및 정형 DB 기반 100% 무결성 ETF 상품 정보, 수수료 시뮬레이션, 절세 계좌 투자 가이드 서비스</div>
-</div>
-""", unsafe_allow_html=True)
+header_col1, header_col2 = st.columns([5, 1])
+with header_col1:
+    st.markdown("""
+    <div class="fintech-header-band">
+        <div class="fintech-brand-label">KOREA INVESTMENT MANAGEMENT</div>
+        <div class="fintech-title">한국투자신탁운용 ACE ETF AI 투자 파트너</div>
+        <div class="fintech-subtitle">공식 공시 데이터 및 정형 DB 기반 100% 무결성 ETF 상품 정보, 수수료 시뮬레이션, 절세 계좌 투자 가이드 서비스</div>
+    </div>
+    """, unsafe_allow_html=True)
+with header_col2:
+    if st.button("대화 초기화", key="reset_chat_btn", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.pending_query = None
+        st.rerun()
 
 
-# --- 2. 상단 추천 퀵 질의 가로 칩 영역 ---
+# --- 2. 질의 실행 대기 처리 (Pending Query) ---
+if st.session_state.pending_query:
+    q_run = st.session_state.pending_query
+    st.session_state.pending_query = None
+    process_user_query(q_run)
+    st.rerun()
+
+
+# --- 3. 상단 추천 퀵 질의 가로 칩 영역 ---
 st.markdown("<div style='font-size:13px; font-weight:600; color:#5b6472; margin-bottom:8px;'>자주 찾는 추천 질의:</div>", unsafe_allow_html=True)
 q_cols = st.columns(4)
 
@@ -195,11 +233,12 @@ for idx, (label, q_text) in enumerate(quick_queries):
     with q_cols[idx]:
         if st.button(label, key=f"quick_chip_{idx}", use_container_width=True):
             st.session_state.pending_query = q_text
+            st.rerun()
 
 st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
 
 
-# --- 3. 메인 AI 대화 스트림 영역 ---
+# --- 4. 메인 AI 대화 스트림 영역 ---
 for msg_idx, msg in enumerate(st.session_state.messages):
     role = msg["role"]
     content = msg["content"]
@@ -218,49 +257,17 @@ for msg_idx, msg in enumerate(st.session_state.messages):
                 with r_cols[r_idx]:
                     if st.button(rec_q, key=f"rec_chip_{msg_idx}_{r_idx}", use_container_width=True):
                         st.session_state.pending_query = rec_q
+                        st.rerun()
 
 
-# 질의 실행 및 파이프라인 연동 처리 함수
-def handle_submit(user_input_text: str):
-    if not user_input_text.strip():
-        return
-
-    # 사용자 질의 저장
-    st.session_state.messages.append({"role": "user", "content": user_input_text})
-    
-    # 5단계 파이프라인 연동 (100% Ground Truth 원천 데이터)
-    with st.spinner("공식 공시 DB 검증 답변 생성 중..."):
-        res = run_pipeline(user_input_text)
-        final_output = res.get("final_output", "")
-        recommended_questions = res.get("recommended_questions", [])
-
-    # 답변 본문과 추천 질문 분리
-    display_text = final_output
-    if "[다음 추천 질문]" in display_text:
-        display_text = display_text.split("[다음 추천 질문]")[0].strip()
-
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": display_text,
-        "recommendations": recommended_questions
-    })
+# --- 5. 하단 질의 입력창 ---
+user_query = st.chat_input("ACE ETF 상품 정보, 수수료 시뮬레이션, 연금 투자 기준을 입력하세요...")
+if user_query:
+    process_user_query(user_query)
     st.rerun()
 
 
-# 상단 퀵 칩 또는 추천 질문 칩 클릭 시 자동 전송 처리
-if st.session_state.pending_query:
-    q_to_run = st.session_state.pending_query
-    st.session_state.pending_query = None
-    handle_submit(q_to_run)
-
-
-# 하단 질의 입력창
-user_query = st.chat_input("ACE ETF 상품 정보, 수수료 시뮬레이션, 연금 투자 기준을 입력하세요...")
-if user_query:
-    handle_submit(user_query)
-
-
-# --- 4. 하단 금융투자 유의사항 및 고객센터 푸터 ---
+# --- 6. 하단 금융투자 유의사항 및 고객센터 푸터 ---
 st.markdown("""
 <div class="legal-disclaimer">
     안내: 본 정보는 한국투자신탁운용 공시 자료 기반 안내이며 투자 권유나 원금 보장을 의미하지 않습니다. 
