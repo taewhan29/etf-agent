@@ -30,13 +30,14 @@ service_account*.json
 secrets.json
 .streamlit/secrets.toml
 
-# Local Vector DB Storage & Raw Data (원천 데이터 제외)
+# Raw PDF & Source Data Files (원천 PDF 파일 커밋 제외)
+*.pdf
+**/data/*.pdf
+*.csv
+
+# Local Vector DB & Structured DB (정형 etf_spec.db 및 구축된 chroma_db 포함)
 chroma_data/
 .chroma/
-**/chroma_db/
-2_prototype/data/chroma_db/
-data/
-**/data/
 
 # Verification & Test Scripts (내부 점검용 스크립트 제외)
 verify_*.py
