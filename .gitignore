@@ -1,0 +1,59 @@
+# IDE & AI Agent Settings (절대 커밋 금지)
+.agents/
+.gemini/
+.vscode/
+.idea/
+
+# Python Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environment Variables, Secrets & API Keys (절대 커밋 금지)
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.secret
+*credential*
+*secret*
+service_account*.json
+secrets.json
+.streamlit/secrets.toml
+
+# Local Vector DB Storage & Raw Data (원천 데이터 제외)
+chroma_data/
+.chroma/
+**/chroma_db/
+2_prototype/data/chroma_db/
+data/
+**/data/
+
+# Verification & Test Scripts (내부 점검용 스크립트 제외)
+verify_*.py
+**/verify_*.py
+
+# Documentation & Proposals (나중에 업로드할 문서 및 1차 과제)
+1_proposal_ppt/
+ARCHITECTURE_AND_DEV_LOG.md
+ETF_챗봇_아키텍처_설계서.md
+
+# Office Temporary Lock Files
+~$*.pptx
+~$*.docx
+~$*.xlsx
+
+# OS Temporary Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
