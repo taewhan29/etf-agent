@@ -31,8 +31,11 @@ def get_gemini_api_key() -> str:
 
     try:
         import streamlit as st  # type: ignore
-        if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
-            return st.secrets["GEMINI_API_KEY"].strip()
+        if hasattr(st, "secrets"):
+            if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
+                return st.secrets["GEMINI_API_KEY"].strip()
+            if "gemini_api_key" in st.secrets and st.secrets["gemini_api_key"]:
+                return st.secrets["gemini_api_key"].strip()
     except Exception:
         pass
 
@@ -44,7 +47,6 @@ def clean_prohibited_characters(text: str) -> str:
     아스테리스크(*) 및 이모티콘 기호 완전 제거
     """
     text = text.replace("*", "")
-    # 이모지 및 특수 기호 제거
     clean_chars = []
     for ch in text:
         if ord(ch) < 0x1F600 or ord(ch) > 0x1F64F:
@@ -73,10 +75,16 @@ def fallback_synthesize(query: str, execution_results: list) -> str:
             txt = output["text"]
             if tname == "tool2_search_pdf_rag" and status == "NOT_FOUND" and has_success_spec_or_math:
                 txt = "[공시 문맥 안내]\n상세 공시 본문은 확인되지 않았으나, 정량 지표 데이터는 위와 같습니다."
+            elif tname == "tool2_search_pdf_rag" and status == "NOT_FOUND":
+                continue
             combined_texts.append(txt)
 
     if not combined_texts:
-        return "조회된 데이터가 없거나 답변을 합성할 수 없습니다."
+        return (
+            "[한국투자신탁운용 ACE ETF 안내]\n"
+            "입력하신 문의 내용과 정확히 일치하는 공시 데이터나 정량 지표를 찾지 못했습니다.\n"
+            "궁금하신 ACE ETF 상품명(예: ACE 미국S&P500, ACE KRX금현물)이나 수수료, 연금계좌 투자 규정에 대해 질문해주시면 정확히 안내해 드리겠습니다."
+        )
 
     # 원천 데이터를 단문 결합
     final_text = "\n\n".join(combined_texts)
@@ -123,14 +131,13 @@ def synthesize_response(exec_info: dict) -> dict:
     
     if api_key:
         try:
-            # google-genai 라이브러리 사용 시도
             from google import genai  # type: ignore
             client = genai.Client(api_key=api_key)
 
             prompt = (
                 f"당신은 한국투자신탁운용 ACE ETF 전문 챗봇입니다.\n"
-                f"오직 아래 제공된 [도구 실행 데이터]만을 바탕으로 사용자의 질문에 답변하십시오.\n"
-                f"데이터에 없는 내용은 절대 추측하거나 지어내지 마십시오.\n"
+                f"아래 제공된 [도구 실행 데이터]를 참고하여 사용자의 질문에 친절하고 정확하게 답변하십시오.\n"
+                f"데이터가 부족할 경우 거짓 정보를 지어내지 말고, 한국투자신탁운용 ACE ETF 공식 안내 및 추천 질문을 활용하도록 유도하십시오.\n"
                 f"불필요한 인사말이나 서론, 사족을 전면 배제하고 명확한 단문 위주로 작성하십시오.\n"
                 f"아스테리스크(*) 기호와 이모티콘은 절대 사용하지 마십시오.\n\n"
                 f"[사용자 질문]: {query}\n\n"
@@ -138,10 +145,24 @@ def synthesize_response(exec_info: dict) -> dict:
                 f"[답변]:"
             )
 
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-            )
+            # gemini-2.5-flash 최우선 시도 (예외 발생 시 2.0-flash / 1.5-flash 자동 폴백)
+            try:
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                )
+            except Exception:
+                try:
+                    response = client.models.generate_content(
+                        model='gemini-2.0-flash',
+                        contents=prompt,
+                    )
+                except Exception:
+                    response = client.models.generate_content(
+                        model='gemini-1.5-flash',
+                        contents=prompt,
+                    )
+
             raw_text = response.text or ""
             final_response = clean_prohibited_characters(raw_text.strip())
 

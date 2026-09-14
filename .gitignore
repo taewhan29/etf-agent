@@ -41,6 +41,8 @@ data/
 # Verification & Test Scripts (내부 점검용 스크립트 제외)
 verify_*.py
 **/verify_*.py
+scratch/
+**/scratch/
 
 # Documentation & Proposals (나중에 업로드할 문서 및 1차 과제)
 1_proposal_ppt/
