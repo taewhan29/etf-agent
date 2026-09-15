@@ -6,8 +6,11 @@
 - 터미널 대화형 CLI 테스트 및 Streamlit UI 연동 지원
 - 이모티콘 및 아스테리스크(*) 완벽 제거
 """
+import logging
 import os
 import sys
+
+logger = logging.getLogger(__name__)
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(CURRENT_DIR)
@@ -36,7 +39,8 @@ def run_pipeline(user_input: str) -> dict:
     # -- 1단계: 질의 정제 --
     try:
         step1 = refine_query(user_input)
-    except Exception:
+    except Exception as e:
+        logger.error("[메인 파이프라인] 1단계 질의 정제 중 오류 발생 (질의: %s): %s", user_input, e, exc_info=True)
         step1 = {
             "raw_query": user_input,
             "cleaned_query": user_input,
@@ -50,7 +54,8 @@ def run_pipeline(user_input: str) -> dict:
     # -- 2단계: 도구 선택 --
     try:
         step2 = select_tools(step1)
-    except Exception:
+    except Exception as e:
+        logger.error("[메인 파이프라인] 2단계 도구 선택 중 오류 발생: %s", e, exc_info=True)
         step2 = {
             "query": user_input,
             "tickers": step1.get("tickers", []),
@@ -62,7 +67,8 @@ def run_pipeline(user_input: str) -> dict:
     # -- 3단계: 도구 실행 --
     try:
         step3 = execute_tools(step2)
-    except Exception:
+    except Exception as e:
+        logger.error("[메인 파이프라인] 3단계 도구 실행 중 오류 발생: %s", e, exc_info=True)
         step3 = {
             "query": user_input,
             "tickers": step2.get("tickers", []),
@@ -76,6 +82,8 @@ def run_pipeline(user_input: str) -> dict:
     for res in step3.get("execution_results", []):
         if res.get("status") in ["ERROR", "EXCEPTION"]:
             tool_name = res.get("tool_name", "")
+            err_msg = res.get("error") or res.get("result") or "상세 원인 미상"
+            logger.warning("[메인 파이프라인] 개별 도구 실행 실패 (%s): %s", tool_name, err_msg)
             if "tool2" in tool_name:
                 degraded.append("투자설명서 검색")
             elif "tool1" in tool_name:
@@ -86,7 +94,8 @@ def run_pipeline(user_input: str) -> dict:
     # -- 4단계: 답변 합성 --
     try:
         step4 = synthesize_response(step3)
-    except Exception:
+    except Exception as e:
+        logger.error("[메인 파이프라인] 4단계 답변 합성 중 오류 발생: %s", e, exc_info=True)
         # 합성 완전 실패 시 원천 텍스트 직접 결합
         raw_texts = []
         for res in step3.get("execution_results", []):
@@ -104,7 +113,8 @@ def run_pipeline(user_input: str) -> dict:
     # -- 5단계: 규제 검증 --
     try:
         step5 = validate_and_finalize(step4, step3)
-    except Exception:
+    except Exception as e:
+        logger.error("[메인 파이프라인] 5단계 규제 검증 중 오류 발생: %s", e, exc_info=True)
         # 검증 실패 시 안전측으로 유의사항만 부착
         safe_text = step4.get("final_response", FALLBACK_MESSAGE)
         disclaimer = (

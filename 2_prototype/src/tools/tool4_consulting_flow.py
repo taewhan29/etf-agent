@@ -3,9 +3,9 @@
 import re
 import os
 import sqlite3
+from contextlib import closing
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DB_PATH = os.path.join(BASE_DIR, "data", "etf_spec.db")
+from config.paths import DB_PATH
 
 GUARDRAIL_PATTERNS = [
     r"원금\s*보장", r"원금\s*보전", r"원금\s*보호", r"원금\s*손실\s*없", r"원금\s*손상\s*없",
@@ -124,11 +124,10 @@ def handle_customer_referral(query: str) -> dict:
     return {"status": "NORMAL", "is_referral": False}
 
 def handle_all_etf_list() -> dict:
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT ticker, name, category FROM etf_spec ORDER BY category, ticker")
-    rows = cur.fetchall()
-    conn.close()
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT ticker, name, category FROM etf_spec ORDER BY category, ticker")
+        rows = cur.fetchall()
 
     if not rows:
         return {"status": "ERROR", "text": "DB에서 ETF 목록을 조회할 수 없습니다."}

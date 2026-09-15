@@ -4,10 +4,8 @@ import os
 import csv
 import sqlite3
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+from config.paths import DATA_DIR, DB_PATH
 CSV_PATH = os.path.join(DATA_DIR, "ETF_DATA.CSV")
-DB_PATH = os.path.join(DATA_DIR, "etf_spec.db")
 
 ALIAS_MAP = {
     "360200": ["s&p500", "sp500", "에스앤피", "스앤피", "스엔피", "미국s&p500", "360200"],

@@ -4,20 +4,32 @@ import os
 import chromadb  # type: ignore
 from chromadb.utils import embedding_functions  # type: ignore
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-CHROMA_DIR = os.path.join(DATA_DIR, "chroma_db")
+from config.paths import CHROMA_DIR
+
+_chroma_client = None
+_embedding_fn = None
+_collection = None
+
+
+def get_chroma_collection():
+    global _chroma_client, _embedding_fn, _collection
+    if _collection is None:
+        if not os.path.exists(CHROMA_DIR):
+            return None
+        try:
+            _embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+            _chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+            _collection = _chroma_client.get_collection(name="ace_etf_prospectus", embedding_function=_embedding_fn)
+        except Exception:
+            return None
+    return _collection
+
 
 def search_pdf_rag(query: str, target_filename: str = None, top_k: int = 2) -> dict:
-    if not os.path.exists(CHROMA_DIR):
-        return {"status": "ERROR", "message": "ChromaDB 저장소가 존재하지 않습니다."}
-
-    ef = embedding_functions.DefaultEmbeddingFunction()
-    client = chromadb.PersistentClient(path=CHROMA_DIR)
-    
-    try:
-        collection = client.get_collection(name="ace_etf_prospectus", embedding_function=ef)
-    except Exception:
+    collection = get_chroma_collection()
+    if collection is None:
+        if not os.path.exists(CHROMA_DIR):
+            return {"status": "ERROR", "message": "ChromaDB 저장소가 존재하지 않습니다."}
         return {"status": "ERROR", "message": "ChromaDB 컬렉션을 찾을 수 없습니다."}
 
     where_clause = None

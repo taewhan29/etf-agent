@@ -2,38 +2,35 @@
 """[도구 1] ETF 기본 스펙 및 7대 정량지표 조회 모듈 (Query_Spec_DB)"""
 import os
 import sqlite3
+from contextlib import closing
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DB_PATH = os.path.join(BASE_DIR, "data", "etf_spec.db")
+from config.paths import DB_PATH
 
 def get_7_quantitative_indicators(tickers: list) -> dict:
     if not tickers:
         return {"status": "ERROR", "message": "조회할 티커가 지정되지 않았습니다."}
 
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    
     records = []
-    for ticker in tickers:
-        cur.execute("""
-            SELECT ticker, name, category, underlying_index, ter, management_fee, distribution_cycle, aum
-            FROM etf_spec
-            WHERE ticker = ?
-        """, (ticker,))
-        row = cur.fetchone()
-        if row:
-            records.append({
-                "ticker": row[0],
-                "name": row[1],
-                "category": row[2],
-                "underlying_index": row[3],
-                "ter": row[4],
-                "management_fee": row[5],
-                "distribution_cycle": row[6],
-                "aum": row[7]
-            })
-            
-    conn.close()
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        cur = conn.cursor()
+        for ticker in tickers:
+            cur.execute("""
+                SELECT ticker, name, category, underlying_index, ter, management_fee, distribution_cycle, aum
+                FROM etf_spec
+                WHERE ticker = ?
+            """, (ticker,))
+            row = cur.fetchone()
+            if row:
+                records.append({
+                    "ticker": row[0],
+                    "name": row[1],
+                    "category": row[2],
+                    "underlying_index": row[3],
+                    "ter": row[4],
+                    "management_fee": row[5],
+                    "distribution_cycle": row[6],
+                    "aum": row[7]
+                })
 
     if not records:
         return {"status": "ERROR", "message": "DB에서 해당 종목 정보를 찾을 수 없습니다."}

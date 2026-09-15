@@ -6,9 +6,7 @@ from pypdf import PdfReader  # type: ignore
 import chromadb  # type: ignore
 from chromadb.utils import embedding_functions  # type: ignore
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-CHROMA_DIR = os.path.join(DATA_DIR, "chroma_db")
+from config.paths import DATA_DIR, CHROMA_DIR
 
 def build_chroma_db():
     pdf_files = glob.glob(os.path.join(DATA_DIR, "*.pdf"))

@@ -3,10 +3,10 @@
 import os
 import re
 import sqlite3
+from contextlib import closing
 from decimal import Decimal
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DB_PATH = os.path.join(BASE_DIR, "data", "etf_spec.db")
+from config.paths import DB_PATH
 
 def parse_amount_and_period(query: str):
     amount = 10000000
@@ -25,21 +25,24 @@ def parse_amount_and_period(query: str):
     elif ten_thousand_match:
         amount = int(ten_thousand_match.group(1)) * 10000
     elif raw_number_match:
-        raw_str = raw_number_match.group(1).replace(",", "")
-        if int(raw_str) >= 10000:
-            amount = int(raw_str)
+        raw_val = raw_number_match.group(1).replace(",", "")
+        amount = int(raw_val)
 
-    month_match = re.search(r"(\d+)\s*개월", query)
-    year_match = re.search(r"(\d+)\s*년", query)
+    year_match = re.search(r"(\d+(?:\.\d+)?)\s*년", query)
+    month_match = re.search(r"(\d+)\s*개?월", query)
+    day_match = re.search(r"(\d+)\s*일", query)
 
-    if month_match:
+    if year_match:
+        period = float(year_match.group(1))
+        period_str = f"{period:g}년"
+    elif month_match:
         months = int(month_match.group(1))
         period = months / 12.0
         period_str = f"{months}개월"
-    elif year_match:
-        years = int(year_match.group(1))
-        period = float(years)
-        period_str = f"{years}년"
+    elif day_match:
+        days = int(day_match.group(1))
+        period = days / 365.0
+        period_str = f"{days}일"
 
     return amount, period, period_str
 
@@ -49,21 +52,18 @@ def calculate_fee_simulation(tickers: list, query: str = "") -> dict:
 
     amount_krw, period_years, period_str = parse_amount_and_period(query)
     
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
     records = []
-    for ticker in tickers:
-        cur.execute("SELECT ticker, name, ter FROM etf_spec WHERE ticker = ?", (ticker,))
-        row = cur.fetchone()
-        if row:
-            records.append({
-                "ticker": row[0],
-                "name": row[1],
-                "ter": Decimal(str(row[2]))
-            })
-
-    conn.close()
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        cur = conn.cursor()
+        for ticker in tickers:
+            cur.execute("SELECT ticker, name, ter FROM etf_spec WHERE ticker = ?", (ticker,))
+            row = cur.fetchone()
+            if row:
+                records.append({
+                    "ticker": row[0],
+                    "name": row[1],
+                    "ter": Decimal(str(row[2]))
+                })
 
     if not records:
         return {"status": "ERROR", "message": "DB에서 해당 종목 수수료 데이터를 찾지 못했습니다."}
